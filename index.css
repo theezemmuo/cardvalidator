@@ -304,13 +304,13 @@ input {
     }
 
     .request-line {
-        flex-wrap: wrap;
+        flex-wrap: nowrap; /* Keep it on one line as much as possible */
         gap: 8px;
+        overflow-x: auto; /* Allow horizontal scroll if needed for very small screens */
     }
 
     .method-label {
-        width: 100%;
-        text-align: center;
+        flex-shrink: 0;
     }
 
     .response-pane {
