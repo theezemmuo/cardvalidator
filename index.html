@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Luhn Console</title>
+    <link rel="stylesheet" href="index.css">
+    <!-- Phosphor Icons -->
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+</head>
+<body>
+
+<aside class="sidebar" id="sidebar">
+    <div class="app-logo">
+        <i class="ph-bold ph-credit-card"></i>
+        <span>luhn_console</span>
+    </div>
+    
+    <div class="sidebar-item active">
+        <i class="ph ph-terminal-window"></i>
+        <span>validator</span>
+    </div>
+</aside>
+
+<div class="overlay" id="sidebar-overlay"></div>
+
+<main class="main-content">
+    <div class="mobile-header">
+        <button class="menu-toggle" id="menu-toggle">
+            <i class="ph ph-list"></i>
+        </button>
+        <span style="font-weight: 700; color: var(--postman-orange); font-size: 14px;">luhn_console</span>
+        <div style="width: 24px;"></div> <!-- Spacer for balance -->
+    </div>
+
+    <div class="request-pane">
+        <div class="request-line">
+            <span class="method-label">validate</span>
+            <span class="url-prefix">card://</span>
+            <div id="brand-badge" class="brand-badge" style="display: none;"></div>
+            <input type="text" id="cc-input" placeholder="enter_card_number_here" maxlength="19" spellcheck="false" autocomplete="off">
+        </div>
+    </div>
+
+    <div class="response-pane" id="response-pane">
+        <!-- Placeholder when no input -->
+        <div class="placeholder-msg" id="placeholder-msg">
+            <i class="ph ph-hand-waving" style="font-size: 24px; display: block; margin-bottom: 12px;"></i>
+            ready for a numeric payload, captain. i'll analyze it in real-time.
+        </div>
+
+        <div id="response-content" style="display: none;">
+            <div class="status-bar">
+                <span class="text-muted">status:</span>
+                <span id="status-tag" class="status-tag">分析中 (analyzing)</span>
+                <span class="text-muted">time: 0ms</span>
+            </div>
+
+            <div class="human-response">
+                <div class="section">
+                    <div class="section-tag">[verdict]</div>
+                    <div class="section-content" id="verdict-content">
+                        initializing analysis sequence...
+                    </div>
+                </div>
+
+                <div class="section">
+                    <div class="section-tag">[mathematical_analysis]</div>
+                    <div class="luhn-explainer">
+                        // the luhn algorithm: a simple pattern check used worldwide to catch typos.
+                    </div>
+                    <div class="section-content">
+                        <table class="analysis-table">
+                            <thead>
+                                <tr>
+                                    <th>digit</th>
+                                    <th>operation</th>
+                                    <th>result</th>
+                                </tr>
+                            </thead>
+                            <tbody id="analysis-body">
+                                <!-- Analysis rows injected here -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="section">
+                    <div class="section-tag">[summary]</div>
+                    <div class="section-content" id="summary-content">
+                        calculation in progress.
+                    </div>
+                </div>
+
+                <div class="human-comment" id="human-comment">
+                    // i'm processing the digits as we speak.
+                </div>
+            </div>
+        </div>
+    </div>
+</main>
+
+<script>
+    class HumanPostmanVisualizer {
+        constructor() {
+            this.input = document.getElementById('cc-input');
+            this.brandBadge = document.getElementById('brand-badge');
+            this.placeholder = document.getElementById('placeholder-msg');
+            this.responseContent = document.getElementById('response-content');
+            this.statusTag = document.getElementById('status-tag');
+            this.verdictContent = document.getElementById('verdict-content');
+            this.analysisBody = document.getElementById('analysis-body');
+            this.summaryContent = document.getElementById('summary-content');
+            this.humanComment = document.getElementById('human-comment');
+
+            this.brands = [
+                { name: 'visa', pattern: /^4/, icon: 'logos/visa.png' },
+                { name: 'mastercard', pattern: /^5[1-5]/, icon: 'logos/mastercard.png' },
+                { name: 'amex', pattern: /^3[47]/, icon: 'logos/amex.png' },
+                { name: 'discover', pattern: /^6(?:011|5)/, icon: 'logos/discover.png' }
+            ];
+
+            this.setupMobileMenu();
+            this.init();
+        }
+
+        setupMobileMenu() {
+            const toggle = document.getElementById('menu-toggle');
+            const sidebar = document.getElementById('sidebar');
+            const overlay = document.getElementById('sidebar-overlay');
+
+            const toggleMenu = () => {
+                sidebar.classList.toggle('open');
+                overlay.classList.toggle('visible');
+            };
+
+            toggle.addEventListener('click', toggleMenu);
+            overlay.addEventListener('click', toggleMenu);
+        }
+
+        init() {
+            this.input.addEventListener('input', (e) => this.process(e.target.value));
+            window.addEventListener('load', () => this.input.focus());
+        }
+
+        process(rawValue) {
+            const digits = rawValue.replace(/\D/g, '');
+            this.updateInputFormatting(rawValue);
+            
+            if (digits.length === 0) {
+                this.placeholder.style.display = 'block';
+                this.responseContent.style.display = 'none';
+                this.brandBadge.style.display = 'none';
+                return;
+            }
+
+            this.placeholder.style.display = 'none';
+            this.responseContent.style.display = 'block';
+            this.renderHumanResponse(digits);
+        }
+
+        updateInputFormatting(value) {
+            const digits = value.replace(/\D/g, '');
+            const formatted = digits.match(/.{1,4}/g)?.join(' ') || '';
+            if (this.input.value !== formatted && value.length > 0) {
+                const cursorPosition = this.input.selectionStart;
+                this.input.value = formatted;
+                this.input.setSelectionRange(cursorPosition, cursorPosition);
+            }
+        }
+
+        renderHumanResponse(digits) {
+            const reversed = digits.split('').reverse();
+            let sum = 0;
+            let rowsHtml = '';
+
+            const results = reversed.map((digitStr, index) => {
+                const digit = parseInt(digitStr, 10);
+                const isEvenPos = (index + 1) % 2 === 0;
+                let result = isEvenPos ? digit * 2 : digit;
+                let action = isEvenPos ? 'double value' : 'keep original';
+                
+                if (isEvenPos && result > 9) {
+                    result -= 9;
+                    action = 'double & subtract 9';
+                }
+                
+                sum += result;
+                return { digit, action, result };
+            });
+
+            results.reverse().forEach(res => {
+                rowsHtml += `
+                    <tr>
+                        <td class="val-text">${res.digit}</td>
+                        <td class="action-text">${res.action}</td>
+                        <td class="res-text">${res.result}</td>
+                    </tr>
+                `;
+            });
+
+            this.analysisBody.innerHTML = rowsHtml;
+
+            const brand = this.brands.find(b => b.pattern.test(digits));
+            const isValid = (sum % 10 === 0) && digits.length >= 13;
+            
+            // Update Brand Badge
+            if (brand) {
+                this.brandBadge.innerHTML = `<img src="${brand.icon}" alt="${brand.name}">`;
+                this.brandBadge.style.display = 'flex';
+            } else {
+                this.brandBadge.style.display = 'none';
+            }
+
+            // Update Verdict
+            if (digits.length < 13) {
+                this.statusTag.innerText = 'waiting_for_data';
+                this.statusTag.className = 'status-tag';
+                this.verdictContent.innerText = `analyzing a partial payload. i see a potential ${brand ? brand.name : 'unknown'} card starts here.`;
+            } else {
+                this.statusTag.innerText = isValid ? '200_ok_valid' : '400_data_invalid';
+                this.statusTag.className = `status-tag ${isValid ? '' : 'error'}`;
+                this.verdictContent.innerText = isValid 
+                    ? `authentication successful. this ${brand ? brand.name : 'card'} passed the mathematical integrity check.`
+                    : `integrity check failed. i found a mismatch in the checksum logic. check for typos!`;
+            }
+
+            // Update Summary
+            this.summaryContent.innerHTML = `total checksum sum: <strong>${sum}</strong>. target modulo: <strong>${sum % 10 === 0 ? '0 (match!)' : sum % 10 + ' (mismatch)'}</strong>.`;
+
+            // Update Human Comment
+            if (digits.length < 13) {
+                this.humanComment.innerText = "// still scanning... i need more digits to be sure.";
+            } else if (isValid) {
+                this.humanComment.innerText = brand 
+                    ? `// everything checks out. that's a valid ${brand.name} number right there.`
+                    : "// valid checksum! no typos detected here.";
+            } else {
+                this.humanComment.innerText = "// wait, the math doesn't add up. one of those numbers might be wrong.";
+            }
+        }
+    }
+
+    new HumanPostmanVisualizer();
+</script>
+
+</body>
+</html>
+
+</body>
+</html>
